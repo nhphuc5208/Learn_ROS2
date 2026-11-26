@@ -1,0 +1,9 @@
+temp_publisher:
+  ros__parameters:
+    rate_hz: 4.0
+    machine_id: "AC-07"
+
+temp_monitor:
+  ros__parameters:
+    threshold: 78.0
+

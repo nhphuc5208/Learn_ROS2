@@ -1,0 +1,13 @@
+# Day 7 - Patrol waypoints in the map frame: [x, y, yaw(rad), x, y, yaw, ...]
+# With SLAM the map origin = robot spawn pose (0, 0), so coordinates match the Gazebo world.
+# Factory: walls at x = ±7, y = ±6; machine_1 at (2.5, 1.5), machine_2 at (-2, -2.5).
+patrol_node:
+  ros__parameters:
+    frame_id: map
+    max_retries: 2
+    waypoints: [
+       4.0,  0.0,  0.0,
+       4.0,  4.0,  1.57,
+      -4.0,  4.0,  3.14,
+      -4.0, -4.0, -1.57,
+    ]

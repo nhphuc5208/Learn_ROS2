@@ -1,0 +1,196 @@
+<?xml version="1.0"?>
+<!--
+  Day 4 - Two-wheeled differential-drive robot.
+  Check:  xacro my_robot.urdf.xacro > /tmp/out.urdf && check_urdf /tmp/out.urdf
+  Command-line arguments:
+    use_arm:=true   add a revolute arm (Day 4 exercise, RViz2 only)
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="my_robot">
+
+  <xacro:arg name="use_arm" default="false"/>
+
+  <!-- ====== PARAMETERS: edit here, not scattered around ====== -->
+  <xacro:property name="base_len"      value="0.40"/>
+  <xacro:property name="base_wid"      value="0.30"/>
+  <xacro:property name="base_hei"      value="0.12"/>
+  <xacro:property name="base_mass"     value="8.0"/>
+  <xacro:property name="wheel_radius"  value="0.06"/>
+  <xacro:property name="wheel_width"   value="0.04"/>
+  <xacro:property name="wheel_mass"    value="0.5"/>
+  <xacro:property name="wheel_sep"     value="0.34"/>
+  <xacro:property name="caster_radius" value="0.03"/>
+  <!-- Ground clearance: raises the body box above the wheel axle.
+       If 0, the bottom of the body (height 0.12) touches the floor, exactly the wheel radius (0.06),
+       so the robot can drive straight but CANNOT turn in place in Gazebo. -->
+  <xacro:property name="base_z_off"    value="0.03"/>
+  <xacro:property name="PI"            value="3.14159265359"/>
+
+  <!-- ====== INERTIA MACROS ====== -->
+  <xacro:macro name="box_inertia" params="m x y z">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia ixx="${m*(y*y+z*z)/12}" iyy="${m*(x*x+z*z)/12}" izz="${m*(x*x+y*y)/12}"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="cyl_inertia" params="m r h">
+    <inertial>
+      <mass value="${m}"/>
+      <inertia ixx="${m*(3*r*r+h*h)/12}" iyy="${m*(3*r*r+h*h)/12}" izz="${m*r*r/2}"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </xacro:macro>
+
+  <!-- ====== COLORS ====== -->
+  <material name="blue"><color rgba="0.1 0.3 0.8 1"/></material>
+  <material name="dark"><color rgba="0.15 0.15 0.15 1"/></material>
+  <material name="grey"><color rgba="0.6 0.6 0.6 1"/></material>
+  <material name="orange"><color rgba="0.9 0.5 0.1 1"/></material>
+
+  <!-- ====== BASE FOOTPRINT: projection onto the floor ====== -->
+  <link name="base_footprint"/>
+
+  <joint name="base_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child  link="base_link"/>
+    <origin xyz="0 0 ${wheel_radius}" rpy="0 0 0"/>
+  </joint>
+
+  <!-- ====== BODY ====== -->
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 ${base_z_off}"/>
+      <geometry><box size="${base_len} ${base_wid} ${base_hei}"/></geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${base_z_off}"/>
+      <geometry><box size="${base_len} ${base_wid} ${base_hei}"/></geometry>
+    </collision>
+    <xacro:box_inertia m="${base_mass}" x="${base_len}" y="${base_wid}" z="${base_hei}"/>
+  </link>
+
+  <!-- ====== WHEEL MACRO ====== -->
+  <xacro:macro name="wheel" params="prefix y_offset">
+    <link name="${prefix}_wheel_link">
+      <visual>
+        <origin rpy="${PI/2} 0 0"/>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+        <material name="dark"/>
+      </visual>
+      <!-- Collision uses a SPHERE instead of a cylinder: with a cylinder, Gazebo makes the wheel touch the floor at
+           its inner edge, so the robot turns ~13% faster than odom thinks -> the SLAM map gets skewed.
+           A sphere touches the floor at the wheel center, matching DiffDrive's wheel_separation. -->
+      <collision>
+        <geometry><sphere radius="${wheel_radius}"/></geometry>
+      </collision>
+      <xacro:cyl_inertia m="${wheel_mass}" r="${wheel_radius}" h="${wheel_width}"/>
+    </link>
+
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <parent link="base_link"/>
+      <child  link="${prefix}_wheel_link"/>
+      <origin xyz="0 ${y_offset} 0" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <dynamics damping="0.01" friction="0.05"/>
+    </joint>
+  </xacro:macro>
+
+  <xacro:wheel prefix="left"  y_offset="${ wheel_sep/2}"/>
+  <xacro:wheel prefix="right" y_offset="${-wheel_sep/2}"/>
+
+  <!-- ====== FRONT CASTER (zero friction set in gazebo.xacro) ====== -->
+  <link name="caster_link">
+    <visual>
+      <geometry><sphere radius="${caster_radius}"/></geometry>
+      <material name="grey"/>
+    </visual>
+    <collision>
+      <geometry><sphere radius="${caster_radius}"/></geometry>
+    </collision>
+    <xacro:cyl_inertia m="0.1" r="${caster_radius}" h="0.01"/>
+  </link>
+
+  <joint name="caster_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="caster_link"/>
+    <origin xyz="${base_len/2 - 0.05} 0 ${-wheel_radius + caster_radius}"/>
+  </joint>
+
+  <!-- ====== LIDAR ====== -->
+  <link name="lidar_link">
+    <visual>
+      <geometry><cylinder radius="0.04" length="0.05"/></geometry>
+      <material name="dark"/>
+    </visual>
+    <collision><geometry><cylinder radius="0.04" length="0.05"/></geometry></collision>
+    <xacro:cyl_inertia m="0.15" r="0.04" h="0.05"/>
+  </link>
+
+  <joint name="lidar_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="lidar_link"/>
+    <origin xyz="0.1 0 ${base_z_off + base_hei/2 + 0.025}"/>
+  </joint>
+
+  <!-- ====== CAMERA ====== -->
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.03 0.08 0.03"/></geometry>
+      <material name="grey"/>
+    </visual>
+    <collision><geometry><box size="0.03 0.08 0.03"/></geometry></collision>
+    <xacro:box_inertia m="0.1" x="0.03" y="0.08" z="0.03"/>
+  </link>
+
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="camera_link"/>
+    <origin xyz="${base_len/2 + 0.015} 0 ${base_z_off + base_hei/4}"/>
+  </joint>
+
+  <!-- ROS-standard optical frame: z points out of the lens -->
+  <link name="camera_optical_link"/>
+  <joint name="camera_optical_joint" type="fixed">
+    <parent link="camera_link"/>
+    <child  link="camera_optical_link"/>
+    <origin rpy="${-PI/2} 0 ${-PI/2}"/>
+  </joint>
+
+  <!-- ====== IMU (added on Day 6) ====== -->
+  <link name="imu_link"/>
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="imu_link"/>
+    <origin xyz="0 0 0"/>
+  </joint>
+
+  <!-- ====== DAY 4 EXERCISE: revolute arm with limits ====== -->
+  <xacro:if value="$(arg use_arm)">
+    <link name="arm_link">
+      <visual>
+        <origin xyz="0 0 0.10"/>
+        <geometry><box size="0.03 0.03 0.20"/></geometry>
+        <material name="orange"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 0.10"/>
+        <geometry><box size="0.03 0.03 0.20"/></geometry>
+      </collision>
+      <xacro:box_inertia m="0.2" x="0.03" y="0.03" z="0.20"/>
+    </link>
+    <joint name="arm_joint" type="revolute">
+      <parent link="base_link"/>
+      <child  link="arm_link"/>
+      <origin xyz="${-base_len/2 + 0.05} 0 ${base_z_off + base_hei/2}"/>
+      <axis xyz="0 1 0"/>
+      <!-- can only rotate from -45° to +90° -->
+      <limit lower="${-PI/4}" upper="${PI/2}" effort="5.0" velocity="1.0"/>
+    </joint>
+  </xacro:if>
+
+  <!-- Gazebo-specific parts live in a separate file (Day 5 + 6) -->
+  <xacro:include filename="$(find my_robot_description)/urdf/gazebo.xacro"/>
+
+</robot>
